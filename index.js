@@ -13,7 +13,7 @@ app.listen(port, () => {
 });
 var  webSockets = {}
 
-const wss = new WebSocket.Server("https://chatbackend-177r.onrender.com/") //run websocket server with port 6060
+const wss = new WebSocket.Server({ port: 6060 }) //run websocket server with port 6060
 wss.on('connection', function (ws, req)  {
     var userID = req.url.substr(1) //get userid from URL ip:6060/userid 
     webSockets[userID] = ws //add new user to the connection list
