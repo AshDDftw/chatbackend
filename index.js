@@ -1,61 +1,51 @@
-const WebSocket = require('ws')
-const express = require('express')
-const moment = require('moment')
-const app = express()
-const port = 7878; //port for https
+const express = require('express');
+const app = express();
+const http = require('http');
+const server = http.createServer(app);
+const { Server } = require("socket.io");
+const io = new Server(server);
+const messages = {};
 
-app.get('/', (req, res) => {
-    res.send("Hello World");
+// Listen for new connections
+io.on('connection', (socket) => {
+  // Extract username and room from query parameters
+  const username = socket.handshake.query.username;
+  const room = socket.handshake.query.room;
+
+  // Join the specified room
+  socket.join(room);
+
+  // Initialize message history for the room if it doesn't exist
+  if (!messages[room]) {
+    messages[room] = [];
+  }
+
+  // Send existing messages to the newly connected client
+  socket.emit('messageHistory', messages[room]);
+
+  // Listen for new messages
+  socket.on('message', (data) => {
+    const message = {
+      message: data.message,
+      senderUsername: username,
+      sentAt: Date.now()
+    };
+
+    console.log(message);
+
+    // Save the message to the room's message history
+    messages[room].push(message);
+
+    // Broadcast the message to all clients in the room
+    io.to(room).emit('message', message);
+  });
+
+  // Handle disconnection
+  socket.on('disconnect', () => {
+    console.log(`${username} disconnected from room ${room}`);
+  });
 });
 
-app.listen(port, () => {
-    console.log(`Example app listening at http://localhost:${port}`)
+server.listen(3000, () => {
+  console.log('listening on *:3000');
 });
-var  webSockets = {}
-
-const wss = new WebSocket.Server({ port: 6060 }) //run websocket server with port 6060
-wss.on('connection', function (ws, req)  {
-    var userID = req.url.substr(1) //get userid from URL ip:6060/userid 
-    webSockets[userID] = ws //add new user to the connection list
-
-    console.log('User ' + userID + ' Connected ') 
-
-    ws.on('message', message => { //if there is any message
-        console.log(message);
-        var datastring = message.toString();
-        if(datastring.charAt(0) == "{"){
-            datastring = datastring.replace(/\'/g, '"');
-            var data = JSON.parse(datastring)
-            if(data.auth == "chatapphdfgjd34534hjdfk"){
-                if(data.cmd == 'send'){ 
-                    var boardws = webSockets[data.userid] //check if there is reciever connection
-                    if (boardws){
-                        var cdata = "{'cmd':'" + data.cmd + "','userid':'"+data.userid+"', 'msgtext':'"+data.msgtext+"'}";
-                        boardws.send(cdata); //send message to reciever
-                        ws.send(data.cmd + ":success");
-                    }else{
-                        console.log("No reciever user found.");
-                        ws.send(data.cmd + ":error");
-                    }
-                }else{
-                    console.log("No send command");
-                    ws.send(data.cmd + ":error");
-                }
-            }else{
-                console.log("App Authincation error");
-                ws.send(data.cmd + ":error");
-            }
-        }else{
-            console.log("Non JSON type data");
-            ws.send(data.cmd + ":error");
-        }
-    })
-
-    ws.on('close', function () {
-        var userID = req.url.substr(1)
-        delete webSockets[userID] //on connection close, remove reciver from connection list
-        console.log('User Disconnected: ' + userID)
-    })
-    
-    ws.send('connected'); //innitial connection return message
-})
